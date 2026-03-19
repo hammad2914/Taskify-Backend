@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import PDFDocument from 'pdfkit';
 import { prisma } from '../config/database';
 import { env } from '../config/env';
@@ -22,6 +22,11 @@ interface ProjectContext {
   tasksByStatus: Record<string, number>;
   completionRate: number;
   last10Activities: string[];
+}
+
+interface CompanyContext extends ProjectContext {
+  totalProjects: number;
+  activeProjects: number;
 }
 
 async function getProjectContext(projectId: string, companyId: string): Promise<ProjectContext> {
@@ -65,10 +70,65 @@ async function getProjectContext(projectId: string, companyId: string): Promise<
   };
 }
 
-function buildPrompt(reportType: string, ctx: ProjectContext): string {
-  return `Generate a ${reportType} report for the following project data:
+async function getCompanyContext(companyId: string): Promise<CompanyContext> {
+  const projects = await prisma.project.findMany({
+    where: { companyId },
+    include: {
+      tasks: { select: { status: true } },
+      members: { where: { status: 'ACCEPTED' } },
+    },
+  });
 
-Project: ${ctx.projectName}
+  const activities = await prisma.activityLog.findMany({
+    where: { project: { companyId } },
+    orderBy: { createdAt: 'desc' },
+    take: 10,
+    include: { user: { select: { fullName: true } } },
+  });
+
+  const tasksByStatus: Record<string, number> = {};
+  let totalTasks = 0;
+  let memberIds = new Set<string>();
+
+  for (const project of projects) {
+    for (const task of project.tasks) {
+      tasksByStatus[task.status] = (tasksByStatus[task.status] ?? 0) + 1;
+      totalTasks++;
+    }
+    for (const member of project.members) {
+      memberIds.add(member.userId);
+    }
+  }
+
+  const completedTasks = tasksByStatus['COMPLETED'] ?? 0;
+  const overdueTasks = tasksByStatus['OVERDUE'] ?? 0;
+  const activeProjects = projects.filter((p) => p.status === 'ACTIVE').length;
+
+  return {
+    projectName: 'Company Overview',
+    startDate: 'N/A',
+    endDate: 'N/A',
+    totalTasks,
+    completedTasks,
+    overdueTasks,
+    memberCount: memberIds.size,
+    tasksByStatus,
+    completionRate: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
+    last10Activities: activities.map((a) => `${a.user.fullName} ${a.action} ${a.entity}`),
+    totalProjects: projects.length,
+    activeProjects,
+  };
+}
+
+function buildPrompt(reportType: string, ctx: ProjectContext): string {
+  const companyCtx = ctx as CompanyContext;
+  const scopeLine = companyCtx.totalProjects !== undefined
+    ? `Scope: Company-wide (${companyCtx.totalProjects} projects, ${companyCtx.activeProjects} active)`
+    : `Project: ${ctx.projectName}`;
+
+  return `Generate a ${reportType} report for the following data:
+
+${scopeLine}
 Duration: ${ctx.startDate} to ${ctx.endDate}
 Total Tasks: ${ctx.totalTasks}
 Completed: ${ctx.completedTasks} (${ctx.completionRate}%)
@@ -120,64 +180,36 @@ export async function generateReport(
   title: string,
 ) {
   let reportData: ReportData;
-  let context: ProjectContext | null = null;
+  const context: ProjectContext = projectId
+    ? await getProjectContext(projectId, companyId)
+    : await getCompanyContext(companyId);
 
-  if (projectId) {
-    context = await getProjectContext(projectId, companyId);
-  }
-
-  if (env.GEMINI_API_KEY && context) {
+  if (env.GEMINI_API_KEY) {
     console.log(`🤖 [AI Report] Calling Gemini (${env.GEMINI_MODEL}) for "${title}" [${reportType}]...`);
     try {
-      const genAI = new GoogleGenerativeAI(env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({
-        model: env.GEMINI_MODEL,
-        systemInstruction: 'You are a professional project management analyst. Analyze the provided project data and generate a structured report in JSON format. Be concise, data-driven, and highlight actionable insights. Respond ONLY with valid JSON — no markdown fences, no extra text.',
-        generationConfig: { responseMimeType: 'application/json' },
-      });
-
+      const ai = new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
       const prompt = buildPrompt(reportType, context);
-      const result = await model.generateContent(prompt);
-      const content = result.response.text();
+      const result = await ai.models.generateContent({
+        model: env.GEMINI_MODEL,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          systemInstruction:
+            'You are a professional project management analyst. Analyze the provided project data and generate a structured report in JSON format. Be concise, data-driven, and highlight actionable insights. Respond ONLY with valid JSON — no markdown fences, no extra text.',
+        },
+      });
+      const content = result.text;
       if (!content) throw new Error('Empty Gemini response');
       reportData = JSON.parse(content) as ReportData;
       console.log(`✅ [AI Report] Gemini generated report successfully | score: ${reportData.performanceScore}/100`);
     } catch (e) {
       console.error('❌ [AI Report] Gemini failed — falling back to mock generator:', e);
-      reportData = context ? generateMockReport(context, reportType) : generateMockReport({
-        projectName: 'Unknown',
-        startDate: 'N/A',
-        endDate: 'N/A',
-        totalTasks: 0,
-        completedTasks: 0,
-        overdueTasks: 0,
-        memberCount: 0,
-        tasksByStatus: {},
-        completionRate: 0,
-        last10Activities: [],
-      }, reportType);
+      reportData = generateMockReport(context, reportType);
       console.log(`⚠️  [AI Report] Using mock report | score: ${reportData.performanceScore}/100`);
     }
   } else {
-    if (!env.GEMINI_API_KEY) {
-      console.log('⚠️  [AI Report] GEMINI_API_KEY not set — using mock generator');
-    } else if (!context) {
-      console.log('⚠️  [AI Report] No project context available — using mock generator');
-    }
-    reportData = context
-      ? generateMockReport(context, reportType)
-      : generateMockReport({
-          projectName: 'Company Report',
-          startDate: 'N/A',
-          endDate: 'N/A',
-          totalTasks: 0,
-          completedTasks: 0,
-          overdueTasks: 0,
-          memberCount: 0,
-          tasksByStatus: {},
-          completionRate: 0,
-          last10Activities: [],
-        }, reportType);
+    console.log('⚠️  [AI Report] GEMINI_API_KEY not set — using mock generator');
+    reportData = generateMockReport(context, reportType);
   }
 
   const report = await prisma.report.create({
