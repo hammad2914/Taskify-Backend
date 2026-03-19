@@ -253,9 +253,10 @@ model Report {
   createdById String
   type       ReportType
   title      String
-  data       Json
-  pdfPath    String?
-  createdAt  DateTime   @default(now())
+  data        Json
+  aiGenerated Boolean  @default(false)
+  pdfPath     String?
+  createdAt   DateTime @default(now())
 
   company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)

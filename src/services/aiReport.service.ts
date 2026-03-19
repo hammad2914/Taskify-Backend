@@ -180,6 +180,7 @@ export async function generateReport(
   title: string,
 ) {
   let reportData: ReportData;
+  let aiGenerated = false;
   const context: ProjectContext = projectId
     ? await getProjectContext(projectId, companyId)
     : await getCompanyContext(companyId);
@@ -201,6 +202,7 @@ export async function generateReport(
       const content = result.text;
       if (!content) throw new Error('Empty Gemini response');
       reportData = JSON.parse(content) as ReportData;
+      aiGenerated = true;
       console.log(`✅ [AI Report] Gemini generated report successfully | score: ${reportData.performanceScore}/100`);
     } catch (e) {
       console.error('❌ [AI Report] Gemini failed — falling back to mock generator:', e);
@@ -220,6 +222,7 @@ export async function generateReport(
       type: reportType as 'PROJECT_SUMMARY' | 'TIMELINE_ANALYSIS' | 'RISK_DETECTION' | 'USER_PERFORMANCE' | 'PRODUCTIVITY_INSIGHTS',
       title,
       data: reportData as unknown as import('@prisma/client').Prisma.InputJsonValue,
+      aiGenerated,
     },
   });
 
