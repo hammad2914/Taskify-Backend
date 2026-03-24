@@ -24,8 +24,9 @@ export async function requireProjectMember(req: Request, res: Response, next: Ne
   const projectId = await resolveProjectId(req, false);
   if (!projectId) { sendError(res, 'Project not found', 404, 'NOT_FOUND'); return; }
 
+  // Allow PENDING members so invited users can view the project and accept the invitation
   const member = await prisma.projectMember.findFirst({
-    where: { projectId, userId: user.userId, status: 'ACCEPTED' },
+    where: { projectId, userId: user.userId, status: { in: ['ACCEPTED', 'PENDING'] } },
   });
 
   if (!member) { sendError(res, 'Not a project member', 403, 'NOT_PROJECT_MEMBER'); return; }
