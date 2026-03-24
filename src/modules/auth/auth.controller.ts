@@ -54,6 +54,16 @@ export function logout(_req: Request, res: Response): void {
   sendSuccess(res, null, 200, 'Logged out');
 }
 
+export async function getInviteDetails(req: Request, res: Response): Promise<void> {
+  try {
+    const result = await authService.getInviteDetails(req.params['token'] as string);
+    sendSuccess(res, result);
+  } catch (err: unknown) {
+    const e = err as { status?: number; message?: string; code?: string };
+    sendError(res, e.message ?? 'Failed to get invite details', e.status ?? 500, e.code);
+  }
+}
+
 export async function acceptInvite(req: Request, res: Response): Promise<void> {
   try {
     const result = await authService.acceptInvite(req.body);

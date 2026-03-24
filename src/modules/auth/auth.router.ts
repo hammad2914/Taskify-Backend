@@ -11,6 +11,7 @@ router.post('/login', validate(loginSchema), controller.login);
 router.post('/refresh', controller.refresh);
 router.post('/logout', authenticate, controller.logout);
 router.get('/me', authenticate, controller.me);
+router.get('/invite/:token', controller.getInviteDetails);
 router.post('/accept-invite', validate(acceptInviteSchema), controller.acceptInvite);
 router.post('/resend-invite/:id', authenticate, requireRole(['COMPANY_ADMIN', 'SUPER_ADMIN']), controller.resendInvite);
 router.post('/change-password', authenticate, validate(changePasswordSchema), controller.changePassword);

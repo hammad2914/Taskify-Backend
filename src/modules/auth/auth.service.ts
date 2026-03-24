@@ -168,6 +168,30 @@ export async function resendInvite(userId: string, companyId: string) {
   return { message: 'Invitation resent' };
 }
 
+export async function getInviteDetails(token: string) {
+  const invitation = await prisma.invitationToken.findUnique({
+    where: { token },
+    include: { user: { include: { company: true } } },
+  });
+
+  if (!invitation) {
+    throw { status: 404, message: 'Invitation not found or invalid', code: 'INVALID_TOKEN' };
+  }
+  if (invitation.usedAt) {
+    throw { status: 400, message: 'Invitation has already been used', code: 'TOKEN_USED' };
+  }
+  if (invitation.expiresAt < new Date()) {
+    throw { status: 400, message: 'Invitation has expired', code: 'TOKEN_EXPIRED' };
+  }
+
+  return {
+    email: invitation.user.email,
+    fullName: invitation.user.fullName,
+    companyName: invitation.user.company.name,
+    expiresAt: invitation.expiresAt,
+  };
+}
+
 export async function changePassword(userId: string, input: ChangePasswordInput) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || !user.passwordHash) {
