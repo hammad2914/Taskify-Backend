@@ -4,7 +4,7 @@ import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '.
 import { generateInvitationToken, getTokenExpiry } from '../../utils/crypto';
 import { sendInvitationEmail } from '../../config/mailer';
 import { env } from '../../config/env';
-import type { RegisterInput, LoginInput, AcceptInviteInput } from './auth.schema';
+import type { RegisterInput, LoginInput, AcceptInviteInput, ChangePasswordInput, UpdateCompanyNameInput } from './auth.schema';
 
 export async function registerCompany(input: RegisterInput) {
   const existing = await prisma.user.findFirst({
@@ -166,6 +166,36 @@ export async function resendInvite(userId: string, companyId: string) {
   await sendInvitationEmail(user.email, user.fullName, inviteUrl, user.company.name);
 
   return { message: 'Invitation resent' };
+}
+
+export async function changePassword(userId: string, input: ChangePasswordInput) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !user.passwordHash) {
+    throw { status: 404, message: 'User not found', code: 'NOT_FOUND' };
+  }
+
+  const valid = await bcrypt.compare(input.currentPassword, user.passwordHash);
+  if (!valid) {
+    throw { status: 400, message: 'Current password is incorrect', code: 'INVALID_PASSWORD' };
+  }
+
+  if (input.currentPassword === input.newPassword) {
+    throw { status: 400, message: 'New password must be different from current password', code: 'SAME_PASSWORD' };
+  }
+
+  const passwordHash = await bcrypt.hash(input.newPassword, 12);
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+
+  return { message: 'Password changed successfully' };
+}
+
+export async function updateCompanyName(companyId: string, input: UpdateCompanyNameInput) {
+  const company = await prisma.company.update({
+    where: { id: companyId },
+    data: { name: input.name },
+  });
+
+  return { company };
 }
 
 function sanitizeUser(user: { id: string; companyId: string; fullName: string; email: string; role: string; status: string; department?: string | null; designation?: string | null; avatarUrl?: string | null }) {

@@ -84,3 +84,23 @@ export async function resendInvite(req: Request, res: Response): Promise<void> {
     sendError(res, e.message ?? 'Resend invite failed', e.status ?? 500, e.code);
   }
 }
+
+export async function changePassword(req: Request, res: Response): Promise<void> {
+  try {
+    const result = await authService.changePassword(req.user!.userId, req.body);
+    sendSuccess(res, result, 200, 'Password changed successfully');
+  } catch (err: unknown) {
+    const e = err as { status?: number; message?: string; code?: string };
+    sendError(res, e.message ?? 'Failed to change password', e.status ?? 500, e.code);
+  }
+}
+
+export async function updateCompanyName(req: Request, res: Response): Promise<void> {
+  try {
+    const result = await authService.updateCompanyName(req.user!.companyId, req.body);
+    sendSuccess(res, result, 200, 'Company name updated successfully');
+  } catch (err: unknown) {
+    const e = err as { status?: number; message?: string; code?: string };
+    sendError(res, e.message ?? 'Failed to update company name', e.status ?? 500, e.code);
+  }
+}
