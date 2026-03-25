@@ -187,22 +187,32 @@ export async function updateTaskStatus(id: string, companyId: string, status: 'I
   if (!task) throw { status: 404, message: 'Task not found or not assigned to you', code: 'NOT_FOUND' };
 
   const validTransitions: Record<string, string[]> = {
-    ACCEPTED: ['IN_PROGRESS'],
+    ACCEPTED:    ['IN_PROGRESS'],
     IN_PROGRESS: ['COMPLETED'],
+    // Overdue tasks can be resumed or marked done directly (completing after the deadline)
+    OVERDUE:     ['IN_PROGRESS', 'COMPLETED'],
   };
 
   if (!validTransitions[task.status]?.includes(status)) {
     throw { status: 400, message: `Cannot transition from ${task.status} to ${status}`, code: 'INVALID_TRANSITION' };
   }
 
+  const now = new Date();
+  const completedLate = status === 'COMPLETED' && now > new Date(task.deadline);
+
   const updated = await prisma.task.update({
     where: { id },
     data: {
       status,
-      completedAt: status === 'COMPLETED' ? new Date() : undefined,
+      completedAt: status === 'COMPLETED' ? now : undefined,
     },
     select: taskSelect,
   });
+
+  // Log whether the task was completed late so the activity feed shows it
+  if (completedLate) {
+    console.log(`[TASK] Task "${task.title}" completed LATE (deadline: ${task.deadline.toISOString()}, completedAt: ${now.toISOString()})`);
+  }
 
   const io = getSocketInstance();
   if (io) {

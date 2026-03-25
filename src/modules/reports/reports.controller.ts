@@ -35,13 +35,7 @@ export async function downloadReport(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const reportData = report.data as {
-      summary: string;
-      keyMetrics: { label: string; value: string }[];
-      risks: { level: 'HIGH' | 'MEDIUM' | 'LOW'; description: string }[];
-      recommendations: string[];
-      performanceScore: number;
-    };
+    const reportData = report.data as unknown as import('../../services/aiReport.service').ReportData;
 
     const pdfBuffer = await aiReportService.generatePdf(reportData, report.title);
 

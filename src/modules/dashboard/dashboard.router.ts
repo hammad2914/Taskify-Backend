@@ -4,6 +4,9 @@ import * as controller from './dashboard.controller';
 
 const router = Router();
 
+// Public — no auth required
+router.get('/public-stats', controller.getPublicStats);
+
 router.use(authenticate);
 
 router.get('/company', requireRole(['COMPANY_ADMIN', 'SUPER_ADMIN']), controller.getCompanyStats);

@@ -13,6 +13,7 @@ import tasksRouter from './modules/tasks/tasks.router';
 import notificationsRouter from './modules/notifications/notifications.router';
 import dashboardRouter from './modules/dashboard/dashboard.router';
 import reportsRouter from './modules/reports/reports.router';
+import demoRouter from './modules/demo/demo.router';
 import { authenticate } from './middleware/auth';
 import { requireProjectMember } from './middleware/requireProjectMember';
 import { createTaskSchema } from './modules/tasks/tasks.schema';
@@ -50,6 +51,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+app.use('/api/demo', demoRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/hr', hrRouter);
